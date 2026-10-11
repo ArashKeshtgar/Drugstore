@@ -21,7 +21,6 @@ Stack: ASP.NET Core 10 minimal API + EF Core over SQL scripts, React 19 + Vite +
   controlled drugs), no-substitution. Each drug is checked against the patient's allergies, the other drugs on the
   prescription and recent medicines (interactions, duplicate therapy), and flagged when monitored, Limited Use or more
   than a year old. The pharmacist matches unmatched drugs, reviews the findings, holds or cancels.
-
 - **Stock and dispensing:** supplier invoices received into lots; a drug ready to fill is dispensed (or refilled)
   from the lots that expire first, priced by the patient's plan, and the money goes to the group's accounting.
 
