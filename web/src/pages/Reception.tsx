@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError, dateTime, drugLabel, firstError, today, type Drug, type ItemInput, type PatientRow, type Prescriber, type QueueRow, type Rx, type Warning } from '../api'
+import { api, ApiError, dateTime, drugLabel, firstError, money, today, type Drug, type ItemInput, type PatientRow, type Prescriber, type QueueRow, type Rx, type Warning } from '../api'
 import { useRef_ } from '../App'
 
 const STATUSES = [['', 'Open'], ['Received', 'Received'], ['InProgress', 'In progress'], ['OnHold', 'On hold'], ['Completed', 'Completed'], ['Cancelled', 'Cancelled']]
@@ -178,6 +178,19 @@ function RxView({ id, onChanged, onClose }: { id: number; onChanged: () => void;
           <Warnings list={it.warnings} />
           {it.warningsReviewedAt && <div className="muted small">Reviewed by {it.warningsReviewedBy}, {dateTime(it.warningsReviewedAt)}</div>}
           {it.cancelReason && <div className="muted small">{it.status}: {it.cancelReason}</div>}
+          {(it.status === 'ReadyToFill' || (it.status === 'Dispensed' && it.refillsRemaining > 0)) && (
+            <div className="actions">
+              <button className="primary" onClick={async () => {
+                const method = window.prompt('If the patient pays a share, how? Cash, Debit, Credit or Account', 'Debit') ?? undefined
+                setError(null)
+                try {
+                  const r = await api.dispense(it.itemId, method)
+                  window.alert(`Dispensed. Total ${money(r.price.total)}: plan ${money(r.price.planPays)}, patient ${money(r.price.patientPays)}.${r.monitored ? ' Monitored drug: record it in the Narcotics Monitoring System.' : ''}`)
+                  setRx(await api.prescription(rx.prescriptionId)); onChanged()
+                } catch (e) { setError(firstError(e, 'Not dispensed.')) }
+              }}>{it.status === 'Dispensed' ? `Refill (${it.refillsRemaining} left)` : 'Dispense'}</button>
+            </div>
+          )}
           {(it.status === 'Received' || it.status === 'OnHold') && (
             <div className="actions">
               {!it.drugId && <select defaultValue="" onChange={e => e.target.value && act(() => api.match(it.itemId, Number(e.target.value)))} aria-label="Match to a product">

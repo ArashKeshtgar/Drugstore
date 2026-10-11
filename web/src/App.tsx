@@ -5,6 +5,7 @@ import BaseDefinitions from './pages/BaseDefinitions'
 import Drugs from './pages/Drugs'
 import People from './pages/People'
 import Reception from './pages/Reception'
+import Stock from './pages/Stock'
 
 type Ctx = { ref: Ref; reloadRef: () => Promise<void> }
 const RefContext = createContext<Ctx | null>(null)
@@ -26,6 +27,7 @@ export function App() {
         <nav>
           <NavLink to="/reception">Reception</NavLink>
           <NavLink to="/people">Patients &amp; prescribers</NavLink>
+          <NavLink to="/stock">Stock</NavLink>
           <NavLink to="/drugs">Drugs</NavLink>
           <NavLink to="/definitions">Base definitions</NavLink>
         </nav>
@@ -37,6 +39,7 @@ export function App() {
           <Route path="/" element={<Navigate replace to="/reception" />} />
           <Route path="/reception" element={<Reception />} />
           <Route path="/people" element={<People />} />
+          <Route path="/stock" element={<Stock />} />
           <Route path="/drugs" element={<Drugs />} />
           <Route path="/definitions" element={<BaseDefinitions />} />
           <Route path="*" element={<Navigate to="/reception" />} />

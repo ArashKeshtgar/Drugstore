@@ -101,7 +101,14 @@ export const api = {
   review: (itemId: number) => request<Rx>('POST', `/api/prescriptions/items/${itemId}/review`),
   hold: (itemId: number, reason?: string) => request<Rx>('POST', `/api/prescriptions/items/${itemId}/hold`, { reason: reason ?? null }),
   cancel: (itemId: number, reason: string) => request<Rx>('POST', `/api/prescriptions/items/${itemId}/cancel`, { reason }),
+  dispense: (itemId: number, paymentMethod?: string, quantity?: number) =>
+    request<{ dispenseId: number; price: Price; monitored: boolean; refillsRemaining: number }>('POST', `/api/prescriptions/items/${itemId}/dispense`, { paymentMethod: paymentMethod ?? null, quantity: quantity ?? null }),
+  stock: (drugId?: number) => request<{ lotId: number; drugId: number; drug: string; din: string; lotNumber: string; expiryDate: string; quantityOnHand: number; unitCost: number; expired: boolean; expiresSoon: boolean }[]>('GET', `/api/stock${q({ drugId })}`),
+  purchases: () => request<{ purchaseId: number; supplier: string; invoiceNumber: string; invoiceDate: string; receivedAt: string; drugsAmount: number; suppliesAmount: number; suppliesHst: number; total: number; lots: number }[]>('GET', '/api/purchases'),
+  receivePurchase: (body: { supplierId: number; invoiceNumber: string; invoiceDate: string; suppliesAmount: number; suppliesHst: number; lines: { drugId: number; lotNumber: string; expiryDate: string; quantity: number; unitCost: number }[] }) =>
+    request<{ purchaseId: number }>('POST', '/api/purchases', body),
 }
+export type Price = { drugCost: number; markup: number; dispensingFee: number; total: number; planPays: number; patientPays: number }
 
 export const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Toronto' })
 export const dateTime = (iso: string) => new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Toronto' })

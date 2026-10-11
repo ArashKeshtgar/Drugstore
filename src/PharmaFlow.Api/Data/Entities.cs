@@ -219,3 +219,66 @@ public class AccessLog
     public int? PatientId { get; set; }
     public string Context { get; set; } = "";
 }
+
+public class Purchase
+{
+    public int PurchaseId { get; set; }
+    public int SupplierId { get; set; }
+    public Supplier Supplier { get; set; } = null!;
+    public string InvoiceNumber { get; set; } = "";
+    public DateOnly InvoiceDate { get; set; }
+    public DateTime ReceivedAt { get; set; }
+    public decimal DrugsAmount { get; set; }
+    public decimal SuppliesAmount { get; set; }
+    public decimal SuppliesHst { get; set; }
+    public string ReceivedBy { get; set; } = "";
+    public List<StockLot> Lots { get; set; } = [];
+}
+
+public class StockLot
+{
+    public int LotId { get; set; }
+    public int DrugId { get; set; }
+    public Drug Drug { get; set; } = null!;
+    public string LotNumber { get; set; } = "";
+    public DateOnly ExpiryDate { get; set; }
+    public decimal QuantityReceived { get; set; }
+    public decimal QuantityOnHand { get; set; }
+    public decimal UnitCost { get; set; }
+    public int? PurchaseId { get; set; }
+    public DateTime ReceivedAt { get; set; }
+}
+
+public class Dispense
+{
+    public int DispenseId { get; set; }
+    public int ItemId { get; set; }
+    public int DrugId { get; set; }
+    public bool IsRefill { get; set; }
+    public decimal Quantity { get; set; }
+    public DateTime DispensedAt { get; set; }
+    public string DispensedBy { get; set; } = "";
+    public int? PlanId { get; set; }
+    public decimal DrugCost { get; set; }
+    public decimal Markup { get; set; }
+    public decimal DispensingFee { get; set; }
+    public decimal Total { get; set; }
+    public decimal PlanPays { get; set; }
+    public decimal PatientPays { get; set; }
+    public string? PaymentMethod { get; set; }
+    public List<DispenseLot> Lots { get; set; } = [];
+}
+
+public class DispenseLot
+{
+    public int DispenseId { get; set; }
+    public int LotId { get; set; }
+    public decimal Quantity { get; set; }
+    public decimal UnitCost { get; set; }
+}
+
+public class FinanceExport
+{
+    public string ExternalId { get; set; } = "";
+    public DateTime SentAt { get; set; }
+}

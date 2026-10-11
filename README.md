@@ -22,6 +22,9 @@ Stack: ASP.NET Core 10 minimal API + EF Core over SQL scripts, React 19 + Vite +
   prescription and recent medicines (interactions, duplicate therapy), and flagged when monitored, Limited Use or more
   than a year old. The pharmacist matches unmatched drugs, reviews the findings, holds or cancels.
 
+- **Stock and dispensing:** supplier invoices received into lots; a drug ready to fill is dispensed (or refilled)
+  from the lots that expire first, priced by the patient's plan, and the money goes to the group's accounting.
+
 The demo catalog's DINs and costs are made up (`IsDemo`), and the plan amounts are settings to confirm against the
 current ODB agreement and each insurer's contract. Patients and prescribers are synthetic.
 
@@ -43,8 +46,12 @@ development until sign-in through ClinicHub is added.
 
 - [x] Base definitions, drug catalog, patients with allergies, prescribers
 - [x] Prescription reception with allergy, interaction, duplicate-therapy, monitored-drug, Limited Use and age checks
-- [ ] Purchasing and inventory by lot and expiry
-- [ ] Filling, verification, dispensing, pricing by plan, payer split, labels
-- [ ] Financial documents to FinancePowerApp (the group's accounting)
+- [x] Purchasing (supplier invoices into lots with expiry and cost) and stock on hand
+- [x] Dispensing and refills: oldest-expiring lots first, never expired stock; price = acquisition cost + the plan's
+      mark-up + dispensing fee; the patient's co-payment taken at the counter, the plan's share owed by the plan
+- [x] Financial documents to FinancePowerApp: supplier invoices as bills (drugs zero-rated, supplies with HST claimed
+      back), each dispense as invoices to the plan and the patient, the patient's payment, and the cost of drugs out of
+      inventory. `Finance:BaseUrl` (and in development `Finance:DevKey`)
+- [ ] Filling and verification as separate steps, labels, Narcotics Monitoring System submission
 - [ ] Electronic prescriptions from ClinicHub; sign-in through ClinicHub
 - [ ] Health Canada Drug Product Database import

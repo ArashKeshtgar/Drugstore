@@ -60,8 +60,8 @@ information system, SQL Server) onto how the work is done in an Ontario communit
 |---|---|
 | Base definitions, drug catalog, patients and allergies, prescribers | **Built** |
 | Reception with checks | **Built** |
-| Purchasing and inventory by lot and expiry | Next |
-| Filling, verification, dispensing, pricing by plan, the payer split | Next |
-| Financial documents to FinancePowerApp (purchases as bills, dispensing as invoices to ODB, insurers and patients, cost of drugs) | Next |
+| Purchasing and inventory by lot and expiry | **Built** |
+| Dispensing and refills, pricing by plan, the payer split | **Built** (filling and verification as separate steps: next) |
+| Financial documents to FinancePowerApp (purchases as bills, dispensing as invoices to ODB, insurers and patients, cost of drugs) | **Built** |
 | Electronic prescriptions from ClinicHub (FHIR MedicationRequest), sign-in through ClinicHub | Later |
 | Importing Health Canada's Drug Product Database instead of the demo catalog | Later |

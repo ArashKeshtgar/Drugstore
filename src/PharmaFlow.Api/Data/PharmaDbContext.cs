@@ -22,6 +22,11 @@ public class PharmaDbContext(DbContextOptions<PharmaDbContext> options) : DbCont
     public DbSet<Prescription> Prescriptions => Set<Prescription>();
     public DbSet<PrescriptionItem> PrescriptionItems => Set<PrescriptionItem>();
     public DbSet<AccessLog> AccessLog => Set<AccessLog>();
+    public DbSet<Purchase> Purchases => Set<Purchase>();
+    public DbSet<StockLot> StockLots => Set<StockLot>();
+    public DbSet<Dispense> Dispenses => Set<Dispense>();
+    public DbSet<DispenseLot> DispenseLots => Set<DispenseLot>();
+    public DbSet<FinanceExport> FinanceExports => Set<FinanceExport>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -71,6 +76,26 @@ public class PharmaDbContext(DbContextOptions<PharmaDbContext> options) : DbCont
         });
         b.Entity<PrescriptionItem>(e => { e.ToTable("PrescriptionItem", "rx"); e.HasKey(x => x.ItemId); e.Property(x => x.Quantity).HasPrecision(10, 2); });
         b.Entity<AccessLog>(e => { e.ToTable("AccessLog", "audit"); e.HasKey(x => x.AuditId); });
+        b.Entity<Purchase>(e =>
+        {
+            e.ToTable("Purchase", "inv");
+            foreach (var p in new[] { nameof(Purchase.DrugsAmount), nameof(Purchase.SuppliesAmount), nameof(Purchase.SuppliesHst) }) e.Property(p).HasPrecision(12, 2);
+            e.HasMany(x => x.Lots).WithOne().HasForeignKey(x => x.PurchaseId);
+        });
+        b.Entity<StockLot>(e =>
+        {
+            e.ToTable("StockLot", "inv"); e.HasKey(x => x.LotId);
+            e.Property(x => x.QuantityReceived).HasPrecision(12, 2); e.Property(x => x.QuantityOnHand).HasPrecision(12, 2); e.Property(x => x.UnitCost).HasPrecision(10, 4);
+        });
+        b.Entity<Dispense>(e =>
+        {
+            e.ToTable("Dispense", "rx");
+            foreach (var p in new[] { nameof(Dispense.Quantity), nameof(Dispense.DrugCost), nameof(Dispense.Markup), nameof(Dispense.DispensingFee), nameof(Dispense.Total), nameof(Dispense.PlanPays), nameof(Dispense.PatientPays) })
+                e.Property(p).HasPrecision(10, 2);
+            e.HasMany(x => x.Lots).WithOne().HasForeignKey(x => x.DispenseId);
+        });
+        b.Entity<DispenseLot>(e => { e.ToTable("DispenseLot", "rx"); e.HasKey(x => new { x.DispenseId, x.LotId }); e.Property(x => x.Quantity).HasPrecision(10, 2); e.Property(x => x.UnitCost).HasPrecision(10, 4); });
+        b.Entity<FinanceExport>(e => { e.ToTable("FinanceExport", "billing"); e.HasKey(x => x.ExternalId); });
     }
 
     public async Task<int> NextRxNumberAsync() =>

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.SqlClient;
 using PharmaFlow.Api.Data;
 using PharmaFlow.Api.Domain;
+using Microsoft.EntityFrameworkCore;
 
 namespace PharmaFlow.Tests;
 
@@ -219,5 +220,92 @@ public class ReceptionApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal("METF500ER", (string)created["interchangeGroup"]!);
         var found = (await Json(await api.GetAsync("/api/drugs?q=Metformin"))).AsArray();
         Assert.True(found.Count >= 2);
+    }
+}
+
+public class PricingTests
+{
+    [Fact]
+    public void Odb_pays_all_but_the_copay_which_comes_out_of_the_fee_first()
+    {
+        var p = Pricing.For(12.345m, new Pricing.PlanTerms(2.00m, 0, 8.83m, 8));
+        Assert.Equal((12.35m, 0.99m, 8.83m, 22.17m), (p.DrugCost, p.Markup, p.DispensingFee, p.Total));
+        Assert.Equal((20.17m, 2.00m), (p.PlanPays, p.PatientPays));
+        var s = Pricing.Split(p);
+        Assert.Equal((13.34m, 6.83m, 0m, 2.00m), s);
+    }
+
+    [Fact]
+    public void Cash_pays_everything_and_a_copay_never_exceeds_the_total()
+    {
+        var cash = Pricing.For(5m, null);
+        Assert.Equal(cash.Total, cash.PatientPays);
+        Assert.Equal(0, cash.PlanPays);
+        var tiny = Pricing.For(0.10m, new Pricing.PlanTerms(50m, 0, 0, 0));
+        Assert.Equal(tiny.Total, tiny.PatientPays);
+    }
+}
+
+public class DispensingApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
+{
+    private static async Task<JsonNode> Json(HttpResponseMessage res)
+    {
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.True(res.IsSuccessStatusCode, $"{(int)res.StatusCode}: {body}");
+        return JsonNode.Parse(body)!;
+    }
+
+    [Fact]
+    public async Task Stock_is_received_dispensed_by_expiry_priced_by_the_plan_and_sent_to_the_accounting()
+    {
+        var api = factory.CreateClient();
+        var metformin = await factory.Scalar<int>("SELECT DrugId FROM ref.Drug WHERE Din = '99000061'");
+        var supplier = await factory.Scalar<int>("SELECT SupplierId FROM ref.Supplier WHERE Code = 'WHOLESALE-A'");
+        await Json(await api.PostAsJsonAsync("/api/purchases", new
+        {
+            supplierId = supplier, invoiceNumber = "INV-1001", invoiceDate = "2026-10-01", suppliesAmount = 100m, suppliesHst = 13m,
+            lines = new[]
+            {
+                new { drugId = metformin, lotNumber = "LATE", expiryDate = "2028-01-31", quantity = 500m, unitCost = 0.0300m },
+                new { drugId = metformin, lotNumber = "SOON", expiryDate = "2027-01-31", quantity = 40m, unitCost = 0.0250m },
+            },
+        }));
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.PostAsJsonAsync("/api/purchases", new { supplierId = supplier, invoiceNumber = "INV-1001", invoiceDate = "2026-10-01", suppliesAmount = 0m, suppliesHst = 0m,
+            lines = new[] { new { drugId = metformin, lotNumber = "X", expiryDate = "2028-01-31", quantity = 1m, unitCost = 0.01m } } })).StatusCode);
+
+        var patient = await factory.Scalar<int>("SELECT PatientId FROM core.Patient WHERE LastName = N'Oduya'");   // ODB
+        var prescriber = await factory.Scalar<int>("SELECT PrescriberId FROM core.Prescriber WHERE LicenceNumber = '99001'");
+        var rx = await Json(await api.PostAsJsonAsync("/api/prescriptions", new
+        {
+            patientId = patient, prescriberId = prescriber, writtenDate = "2026-10-10", channel = "Paper",
+            items = new[] { new { drugId = metformin, drugText = "Metformin 500 mg", sig = "1 TAB PO BID", quantity = 60m, refillsAuthorized = 1, noSubstitution = false } },
+        }));
+        var item = (int)rx["items"]![0]!["itemId"]!;
+        Assert.Equal(HttpStatusCode.Conflict, (await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/dispense", new { paymentMethod = "Debit" })).StatusCode);   // not reviewed
+        await Json(await api.PostAsync($"/api/prescriptions/items/{item}/review", null));
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/dispense", new { })).StatusCode);   // the co-pay needs a method
+
+        var first = await Json(await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/dispense", new { paymentMethod = "Debit" }));
+        // 40 from the lot expiring first at 0.025, then 20 at 0.03: 1.00 + 0.60.
+        Assert.Equal(1.60m, (decimal)first["price"]!["drugCost"]!);
+        Assert.Equal(2.00m, (decimal)first["price"]!["patientPays"]!);
+        Assert.Equal(0m, await factory.Scalar<decimal>("SELECT QuantityOnHand FROM inv.StockLot WHERE LotNumber = 'SOON'"));
+        var refill = await Json(await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/dispense", new { paymentMethod = "Cash" }));
+        Assert.Equal(0, (int)refill["refillsRemaining"]!);
+        Assert.Equal(HttpStatusCode.Conflict, (await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/dispense", new { paymentMethod = "Cash" })).StatusCode);
+
+        await using var db = new PharmaDbContext(new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<PharmaDbContext>()
+            .UseSqlServer(factory.ConnectionString).Options);
+        var docs = await FinanceFeed.BuildAsync(db, "pharmacy");
+        var bill = docs.Single(d => (string)d["kind"]! == "Bill");
+        Assert.Equal(16.00m, (decimal)bill["lines"]!.AsArray().Single(l => (string)l!["category"]! == "Inventory.Drugs")!["amount"]!);
+        Assert.Equal(13m, (decimal)bill["lines"]!.AsArray().Single(l => (string)l!["category"]! == "Medical Supplies")!["tax"]!);
+        var dispenseId = (int)first["dispenseId"]!;
+        var odb = docs.Single(d => (string)d["externalId"]! == $"dispense:{dispenseId}:plan");
+        Assert.Equal("ODB", (string)odb["party"]!["type"]!);
+        Assert.Contains(docs, d => (string)d["externalId"]! == $"dispense:{dispenseId}:paid" && (string)d["method"]! == "Debit");
+        var cost = docs.Single(d => (string)d["externalId"]! == $"dispense:{dispenseId}:cost");
+        Assert.Equal(1.60m, (decimal)cost["lines"]![0]!["amount"]!);
+        Assert.DoesNotContain("Oduya", new JsonArray(docs.Select(d => (JsonNode)d.DeepClone()).ToArray()).ToJsonString());
     }
 }
