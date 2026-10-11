@@ -9,7 +9,7 @@ public static class DrugEndpoints
 {
     public record DrugRow(int DrugId, string Din, string BrandName, int IngredientId, string Ingredient, decimal? Strength, string? StrengthUnit,
         string FormCode, string RouteCode, string ScheduleCode, string Schedule, bool Monitored, int? ManufacturerId, string? Manufacturer,
-        int PackSize, string DispensingUnit, decimal UnitCost, bool OdbBenefit, bool OdbLimitedUse, string? InterchangeGroup, bool IsActive, bool IsDemo, string Form);
+        int PackSize, string DispensingUnit, decimal UnitCost, bool OdbBenefit, bool OdbLimitedUse, string? InterchangeGroup, bool IsActive, bool IsDemo, string Form, string? StrengthUnitName);
     public record DrugBody(string Din, string BrandName, int IngredientId, decimal? Strength, string? StrengthUnit, string FormCode, string RouteCode,
         string ScheduleCode, int? ManufacturerId, int PackSize, string DispensingUnit, decimal UnitCost, bool OdbBenefit, bool OdbLimitedUse,
         string? InterchangeGroup, bool IsActive = true);
@@ -36,7 +36,8 @@ public static class DrugEndpoints
         d.DrugId, d.Din, d.BrandName, d.IngredientId, d.Ingredient.Name, d.Strength, d.StrengthUnit, d.FormCode, d.RouteCode, d.ScheduleCode,
         d.Schedule.Name, d.Schedule.Monitored, d.ManufacturerId, d.Manufacturer != null ? d.Manufacturer.Name : null, d.PackSize, d.DispensingUnit,
         d.UnitCost, d.OdbBenefit, d.OdbLimitedUse, d.InterchangeGroup, d.IsActive, d.IsDemo,
-        db.DosageForms.Where(f => f.Code == d.FormCode).Select(f => f.Name).FirstOrDefault() ?? d.FormCode));
+        db.DosageForms.Where(f => f.Code == d.FormCode).Select(f => f.Name).FirstOrDefault() ?? d.FormCode,
+        db.Units.Where(u => u.Code == d.StrengthUnit).Select(u => u.Name).FirstOrDefault()));
 
     private static async Task<IResult> Save(PharmaDbContext db, TimeProvider clock, int? id, DrugBody b)
     {
