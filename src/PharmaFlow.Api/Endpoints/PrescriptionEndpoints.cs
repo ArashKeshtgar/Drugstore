@@ -215,7 +215,7 @@ public static class PrescriptionEndpoints
     }
 
     /// <summary>The prescription's state follows its drugs.</summary>
-    private static async Task Settle(PharmaDbContext db, Prescription rx, TimeProvider clock)
+    internal static async Task Settle(PharmaDbContext db, Prescription rx, TimeProvider clock)
     {
         await db.SaveChangesAsync();
         var statuses = await db.PrescriptionItems.Where(i => i.PrescriptionId == rx.PrescriptionId).Select(i => i.Status).ToListAsync();
@@ -228,6 +228,6 @@ public static class PrescriptionEndpoints
         await db.SaveChangesAsync();
     }
 
-    private static readonly TimeZoneInfo Toronto = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
+    internal static readonly TimeZoneInfo Toronto = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
     public static DateOnly Today(TimeProvider clock) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(clock.GetUtcNow().UtcDateTime, Toronto));
 }

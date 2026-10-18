@@ -38,6 +38,11 @@ cd web; npm install; npm run dev               # http://localhost:5501
 dotnet test                                    # builds its own database from database/*.sql
 ```
 
+Electronic prescriptions need ClinicHub running: `ClinicHub:Authority` (its address, the issuer of its tokens) and, in
+development, `ClinicHub:MetadataAddress`, are in `appsettings.Development.json`. ClinicHub sends to `{this address}/fhir`
+(`Integrations:PharmaFlow:FhirBaseUrl`), directly or through IntegrationHub's `pharmaflow` route. An existing database
+gets the new column with `./database/deploy.ps1`.
+
 Sign-in is a development-only stub for now (everyone is the developer pharmacist); the API refuses to start outside
 development until sign-in through ClinicHub is added.
 
@@ -52,5 +57,8 @@ development until sign-in through ClinicHub is added.
       back), each dispense as invoices to the plan and the patient, the patient's payment, and the cost of drugs out of
       inventory. `Finance:BaseUrl` (and in development `Finance:DevKey`)
 - [ ] Filling and verification as separate steps, labels, Narcotics Monitoring System submission
-- [ ] Electronic prescriptions from ClinicHub; sign-in through ClinicHub
+- [x] Electronic prescriptions from ClinicHub: a FHIR Bundle to `/fhir` (token from ClinicHub, audience `pharmaflow`,
+      scope `prescriptions`) becomes one `eRx` prescription at reception; a resend is recognised; a drug is withdrawn
+      until it is filled, after which the pharmacy answers 409. `ClinicHub:Authority` turns it on
+- [ ] Sign-in through ClinicHub (`pharmaflow:*` permissions), which also lets the API start outside development
 - [ ] Health Canada Drug Product Database import

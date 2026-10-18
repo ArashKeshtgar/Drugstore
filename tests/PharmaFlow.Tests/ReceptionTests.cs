@@ -1,4 +1,15 @@
 using System.Net;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Microsoft.IdentityModel.Tokens;
+using PharmaFlow.Api.Auth;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -83,7 +94,28 @@ public sealed class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:PharmaFlow", ConnectionString);
+        // ClinicHub is a separate project: its keys are a stand-in, and tokens are signed here with the test key.
+        builder.UseSetting("ClinicHub:Authority", HubIssuer);
+        builder.UseSetting("ClinicHub:RequireHttpsMetadata", "false");
+        builder.ConfigureTestServices(services => services.PostConfigure<JwtBearerOptions>(ClinicHubService.Scheme, o =>
+        {
+            var configuration = new OpenIdConnectConfiguration { Issuer = HubIssuer };
+            configuration.SigningKeys.Add(HubKey);
+            o.ConfigurationManager = new StaticConfigurationManager<OpenIdConnectConfiguration>(configuration);
+        }));
     }
+
+    public const string HubIssuer = "http://clinichub.test/";
+    public static readonly RsaSecurityKey HubKey = new(RSA.Create(2048)) { KeyId = "test" };
+
+    /// <summary>The token ClinicHub sends on its own: audience pharmaflow, a scope, and the clinic.</summary>
+    public static string HubToken(string clinic = "harbourview", string scope = "prescriptions", string audience = "pharmaflow", SecurityKey? key = null) =>
+        new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
+        {
+            Issuer = HubIssuer, Audience = audience, Expires = DateTime.UtcNow.AddMinutes(5),
+            SigningCredentials = new SigningCredentials(key ?? HubKey, SecurityAlgorithms.RsaSha256),
+            Subject = new ClaimsIdentity([new Claim("sub", "clinichub"), new Claim("scope", scope), new Claim("clinic_slug", clinic), new Claim("clinic_name", "Harbourview Medical Centre (demo)")]),
+        });
 
     public async Task InitializeAsync()
     {

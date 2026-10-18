@@ -208,6 +208,8 @@ public class PrescriptionItem
     public string? WarningsReviewedBy { get; set; }
     public DateTime? WarningsReviewedAt { get; set; }
     public string? CancelReason { get; set; }
+    /// <summary>An electronic prescription's drug in the sending system, "{system}|{value}".</summary>
+    public string? ExternalId { get; set; }
 }
 
 public class AccessLog

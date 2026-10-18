@@ -13,7 +13,8 @@ builder.Services.AddDbContext<PharmaDbContext>(o => o.UseSqlServer(builder.Confi
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.Services.AddAuthentication(DevAuthHandler.Scheme).AddScheme<AuthenticationSchemeOptions, DevAuthHandler>(DevAuthHandler.Scheme, _ => { });
+builder.Services.AddAuthentication(DevAuthHandler.Scheme).AddScheme<AuthenticationSchemeOptions, DevAuthHandler>(DevAuthHandler.Scheme, _ => { })
+    .AddClinicHubService(builder.Configuration);
 builder.Services.AddAuthorization();
 // The pharmacy's money to FinancePowerApp, when Finance:BaseUrl is set.
 builder.Services.Configure<PharmaFlow.Api.Domain.FinanceOptions>(builder.Configuration.GetSection("Finance"));
@@ -36,6 +37,7 @@ app.MapDrugEndpoints();
 app.MapPeopleEndpoints();
 app.MapPrescriptionEndpoints();
 app.MapInventoryEndpoints();
+app.MapFhirEndpoints();
 
 app.Run();
 
