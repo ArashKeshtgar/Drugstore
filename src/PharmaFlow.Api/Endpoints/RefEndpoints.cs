@@ -1,3 +1,4 @@
+using PharmaFlow.Api.Auth;
 using Microsoft.EntityFrameworkCore;
 using PharmaFlow.Api.Data;
 
@@ -20,7 +21,7 @@ public static class RefEndpoints
 
     public static void MapRefEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api/ref").WithTags("Base definitions").RequireAuthorization();
+        var api = app.MapGroup("/api/ref").WithTags("Base definitions").RequireAuthorization(Policies.Any).RequireForWrites(Policies.Admin);
 
         // Everything the forms need for their lists, in one call.
         api.MapGet("", async (PharmaDbContext db) => new

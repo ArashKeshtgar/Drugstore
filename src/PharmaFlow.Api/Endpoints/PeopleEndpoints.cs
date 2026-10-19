@@ -17,7 +17,7 @@ public static class PeopleEndpoints
 
     public static void MapPeopleEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api").RequireAuthorization();
+        var api = app.MapGroup("/api").RequireAuthorization(Policies.Any).RequireForWrites(Policies.Reception);
 
         api.MapGet("/patients", async (string? q, PharmaDbContext db) =>
         {

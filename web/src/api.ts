@@ -7,7 +7,8 @@ export class ApiError extends Error {
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method, credentials: 'same-origin',
-    headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+    // X-PharmaFlow: with sign-in through ClinicHub the session is a cookie, so the API wants proof the call comes from this app.
+    headers: { 'X-PharmaFlow': '1', ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
   if (res.status === 204) return undefined as T
@@ -20,6 +21,8 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
 export const firstError = (e: unknown, fallback: string) =>
   e instanceof ApiError ? Object.values(e.fieldErrors).flat()[0] ?? e.message : fallback
 
+/** name is null when nobody is signed in. permissions: reception, dispense, stock, admin (admin allows all). */
+export type Me = { name: string | null; permissions: string[]; clinic: string | null }
 export type Code = { code: string; name: string; nameFr?: string; isActive: boolean }
 export type Unit = { code: string; name: string; kind: 'Strength' | 'Dispensing'; isActive: boolean }
 export type Schedule = { code: string; name: string; requiresPrescription: boolean; monitored: boolean; description?: string }
@@ -65,7 +68,8 @@ const q = (params: Record<string, string | number | boolean | undefined | null>)
 }
 
 export const api = {
-  me: () => request<{ name: string }>('GET', '/api/me'),
+  me: () => request<Me>('GET', '/api/me'),
+  authSettings: () => request<{ signIn: 'clinichub' | 'demo' }>('GET', '/api/auth/settings'),
   ref: () => request<Ref>('GET', '/api/ref'),
   saveCode: (table: 'forms' | 'routes', code: string, body: { name: string; nameFr?: string | null; isActive: boolean }) => request<Code>('PUT', `/api/ref/${table}/${encodeURIComponent(code)}`, body),
   saveUnit: (code: string, body: { name: string; kind: string; isActive: boolean }) => request<Unit>('PUT', `/api/ref/units/${encodeURIComponent(code)}`, body),

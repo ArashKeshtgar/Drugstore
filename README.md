@@ -43,8 +43,16 @@ development, `ClinicHub:MetadataAddress`, are in `appsettings.Development.json`.
 (`Integrations:PharmaFlow:FhirBaseUrl`), directly or through IntegrationHub's `pharmaflow` route. An existing database
 gets the new column with `./database/deploy.ps1`.
 
-Sign-in is a development-only stub for now (everyone is the developer pharmacist); the API refuses to start outside
-development until sign-in through ClinicHub is added.
+Sign-in is a development stub (everyone is the developer pharmacist, with every permission; the header `X-Dev-Permissions:
+reception stock` narrows it) unless PharmaFlow is connected to ClinicHub. To sign in through ClinicHub, with ClinicHub
+running and its `pharmaflow` client configured (Development has one), start the API with
+
+```powershell
+$env:ClinicHub__ClientSecret='dev-only-pharmaflow-secret'; dotnet run --project src/PharmaFlow.Api
+```
+
+and open the web on http://localhost:5501 (the address registered at ClinicHub). The demo user `pharmacist` has the
+Pharmacist role; `admin` has everything.
 
 ## Status
 
@@ -60,5 +68,7 @@ development until sign-in through ClinicHub is added.
 - [x] Electronic prescriptions from ClinicHub: a FHIR Bundle to `/fhir` (token from ClinicHub, audience `pharmaflow`,
       scope `prescriptions`) becomes one `eRx` prescription at reception; a resend is recognised; a drug is withdrawn
       until it is filled, after which the pharmacy answers 409. `ClinicHub:Authority` turns it on
-- [ ] Sign-in through ClinicHub (`pharmaflow:*` permissions), which also lets the API start outside development
+- [x] Sign-in through ClinicHub: OpenID Connect, one session cookie re-checked with ClinicHub every few minutes. Its
+      roles give `reception`, `dispense`, `stock` and `admin` (which implies the rest); reads need any of them. With
+      `ClinicHub:ClientSecret` set the API starts outside development too, and the development stub is gone
 - [ ] Health Canada Drug Product Database import

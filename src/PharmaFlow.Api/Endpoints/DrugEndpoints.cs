@@ -1,3 +1,4 @@
+using PharmaFlow.Api.Auth;
 using Microsoft.EntityFrameworkCore;
 using PharmaFlow.Api.Data;
 using static PharmaFlow.Api.Endpoints.RefEndpoints;
@@ -16,7 +17,7 @@ public static class DrugEndpoints
 
     public static void MapDrugEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api/drugs").WithTags("Drugs").RequireAuthorization();
+        var api = app.MapGroup("/api/drugs").WithTags("Drugs").RequireAuthorization(Policies.Any).RequireForWrites(Policies.Admin);
 
         // Finds by DIN, brand or ingredient; the ingredient's other products come along (interchangeable choices).
         api.MapGet("", async (string? q, bool? all, PharmaDbContext db) =>

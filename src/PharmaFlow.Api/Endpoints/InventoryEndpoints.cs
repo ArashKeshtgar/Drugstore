@@ -19,7 +19,7 @@ public static class InventoryEndpoints
 
     public static void MapInventoryEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api").RequireAuthorization();
+        var api = app.MapGroup("/api").RequireAuthorization(Policies.Any);
 
         api.MapGet("/purchases", async (PharmaDbContext db) => await db.Purchases.AsNoTracking().OrderByDescending(p => p.ReceivedAt).Take(200)
             .Select(p => new { p.PurchaseId, supplier = p.Supplier.Name, p.InvoiceNumber, p.InvoiceDate, p.ReceivedAt, p.DrugsAmount, p.SuppliesAmount, p.SuppliesHst,
@@ -59,7 +59,7 @@ public static class InventoryEndpoints
             db.Purchases.Add(purchase);
             await db.SaveChangesAsync();
             return Results.Created($"/api/purchases/{purchase.PurchaseId}", new { purchase.PurchaseId, purchase.DrugsAmount });
-        }).WithTags("Inventory");
+        }).WithTags("Inventory").RequireAuthorization(Policies.Stock);
 
         api.MapGet("/stock", async (int? drugId, PharmaDbContext db, TimeProvider clock) =>
         {
@@ -116,6 +116,6 @@ public static class InventoryEndpoints
             PeopleEndpoints.Audit(db, user, clock, "Update", rx.PatientId, $"Dispensed {item.Drug!.BrandName} on Rx {rx.RxNumber}");
             await db.SaveChangesAsync();
             return Results.Ok(new { dispense.DispenseId, price, monitored = await db.Drugs.AnyAsync(d => d.DrugId == item.DrugId && d.Schedule.Monitored), refillsRemaining = item.RefillsRemaining });
-        }).WithTags("Dispensing");
+        }).WithTags("Dispensing").RequireAuthorization(Policies.Dispense);
     }
 }

@@ -25,7 +25,7 @@ public static class PrescriptionEndpoints
 
     public static void MapPrescriptionEndpoints(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api/prescriptions").WithTags("Reception").RequireAuthorization();
+        var api = app.MapGroup("/api/prescriptions").WithTags("Reception").RequireAuthorization(Policies.Any).RequireForWrites(Policies.Reception);
 
         // The reception queue: what came in, newest first; by default what is still open.
         api.MapGet("", async (string? status, PharmaDbContext db) =>

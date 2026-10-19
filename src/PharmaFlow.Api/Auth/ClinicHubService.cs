@@ -19,8 +19,16 @@ public class ClinicHubOptions
     /// <summary>The application's client id in ClinicHub, which is also the audience of the tokens it sends.</summary>
     public string ClientId { get; set; } = "pharmaflow";
 
+    /// <summary>The application's secret in ClinicHub. With it, staff sign in through ClinicHub; without it, only the development sign-in exists.</summary>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>How often a signed-in session is checked with ClinicHub again, and how long ClinicHub may be unreachable before it ends.</summary>
+    public int RecheckMinutes { get; set; } = 5;
+    public int OfflineGraceMinutes { get; set; } = 30;
+
     public bool RequireHttpsMetadata { get; set; } = true;
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
+    public bool SignInEnabled => Enabled && !string.IsNullOrWhiteSpace(ClientSecret);
 }
 
 public static class ClinicHubService

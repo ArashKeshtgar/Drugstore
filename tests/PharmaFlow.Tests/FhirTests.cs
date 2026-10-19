@@ -194,3 +194,62 @@ public class FhirTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(notAHealthCard, token)).Status);
     }
 }
+
+/// <summary>What each of ClinicHub's pharmacy permissions allows (the development stub stands in for a signed-in person).</summary>
+public class PermissionTests(ApiFactory factory) : IClassFixture<ApiFactory>
+{
+    private async Task<HttpStatusCode> Call(HttpMethod method, string url, string? permissions)
+    {
+        var api = factory.CreateClient();
+        var request = new HttpRequestMessage(method, url);
+        if (permissions is not null)
+            request.Headers.Add("X-Dev-Permissions", permissions);
+        if (method != HttpMethod.Get)
+            request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+        return (await api.SendAsync(request)).StatusCode;
+    }
+
+    [Fact]
+    public async Task Someone_with_no_pharmacy_permission_is_refused_everything()
+    {
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Get, "/api/drugs", "none"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Get, "/api/prescriptions", "none"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Get, "/api/stock", "none"));
+    }
+
+    [Fact]
+    public async Task Reception_reads_everything_and_writes_only_reception_work()
+    {
+        Assert.Equal(HttpStatusCode.OK, await Call(HttpMethod.Get, "/api/drugs", "reception"));
+        Assert.Equal(HttpStatusCode.OK, await Call(HttpMethod.Get, "/api/stock", "reception"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/prescriptions", "reception"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/patients", "reception"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/drugs", "reception"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/ref/plans", "reception"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/purchases", "reception"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/prescriptions/items/1/dispense", "reception"));
+    }
+
+    [Fact]
+    public async Task Dispensing_stock_and_administration_each_open_their_own_work()
+    {
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/prescriptions/items/1/dispense", "dispense"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/purchases", "dispense"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/purchases", "stock"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/prescriptions", "stock"));
+        // Administration implies the rest.
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/drugs", "admin"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/purchases", "admin"));
+        Assert.NotEqual(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/prescriptions/items/1/dispense", "admin"));
+        Assert.Equal(HttpStatusCode.Forbidden, await Call(HttpMethod.Post, "/api/drugs", "reception stock dispense"));
+    }
+
+    [Fact]
+    public async Task Who_am_I_lists_the_permissions_and_nobody_signed_in_is_a_null_name()
+    {
+        var me = JsonNode.Parse(await (await factory.CreateClient().GetAsync("/api/me")).Content.ReadAsStringAsync())!;
+        Assert.Equal(4, me["permissions"]!.AsArray().Count);
+        var settings = JsonNode.Parse(await factory.CreateClient().GetStringAsync("/api/auth/settings"))!;
+        Assert.Equal("demo", (string)settings["signIn"]!);
+    }
+}
