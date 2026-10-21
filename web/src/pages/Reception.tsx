@@ -160,6 +160,8 @@ function RxView({ id, onChanged, onClose }: { id: number; onChanged: () => void;
       <div className="side-head"><h2>Rx <span className="mono">{rx.rxNumber}</span> <span className={`badge ${rx.status}`}>{rx.status}</span></h2><button className="quiet" onClick={onClose} aria-label="Close">✕</button></div>
       <div className="facts">
         <span>Patient</span><strong>{rx.patient} <span className="muted small">born {rx.dateOfBirth}</span></strong>
+        {rx.confidentiality && <><span>Consent</span><span className="badge" title="The patient has a consent directive at the clinic: share this prescription only with those caring for them">
+          {rx.confidentiality === 'V' ? 'Very restricted' : 'Restricted'}</span></>}
         <span>Allergies</span><span>{rx.allergies.length ? rx.allergies.map(a => `${a.what}${a.reaction ? ` (${a.reaction})` : ''}`).join(', ') : 'None on file'}</span>
         <span>Prescriber</span><span>{rx.prescriber} · {rx.prescriberLicence}</span>
         <span>Written</span><span>{rx.writtenDate} · received {dateTime(rx.receivedAt)} by {rx.channel.toLowerCase()} ({rx.receivedBy})</span>

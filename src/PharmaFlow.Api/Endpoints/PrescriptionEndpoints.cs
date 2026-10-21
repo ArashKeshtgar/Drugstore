@@ -177,7 +177,7 @@ public static class PrescriptionEndpoints
         Warning[] Warnings, string? WarningsReviewedBy, DateTime? WarningsReviewedAt, string? CancelReason);
     public record RxDetail(int PrescriptionId, string RxNumber, int PatientId, string Patient, DateOnly DateOfBirth, int PrescriberId, string Prescriber,
         string PrescriberLicence, DateOnly WrittenDate, DateTime ReceivedAt, string Channel, int? PlanId, string? Plan, string Status, string? Notes, string ReceivedBy,
-        object[] Allergies, ItemDetail[] Items);
+        object[] Allergies, ItemDetail[] Items, string? Confidentiality);
 
     public static async Task<RxDetail?> Detail(PharmaDbContext db, int id)
     {
@@ -192,7 +192,8 @@ public static class PrescriptionEndpoints
             [.. r.Patient.Allergies.Select(a => (object)new { what = a.Ingredient?.Name ?? a.AllergyClass ?? a.Description, a.Reaction, a.Severity })],
             [.. r.Items.OrderBy(i => i.LineNumber).Select(i => new ItemDetail(i.ItemId, i.LineNumber, i.DrugId, i.Drug?.BrandName, i.Drug?.Din, i.Drug?.Ingredient.Name,
                 i.Drug?.Schedule.Name, i.DrugText, i.Sig, i.SigExpanded, i.Quantity, i.DaysSupply, i.RefillsAuthorized, i.RefillsRemaining, i.NoSubstitution, i.Status,
-                JsonSerializer.Deserialize<Warning[]>(i.WarningsJson, Json) ?? [], i.WarningsReviewedBy, i.WarningsReviewedAt, i.CancelReason))]);
+                JsonSerializer.Deserialize<Warning[]>(i.WarningsJson, Json) ?? [], i.WarningsReviewedBy, i.WarningsReviewedAt, i.CancelReason))],
+            r.Confidentiality);
     }
 
     private static async Task<(Prescription? Rx, PrescriptionItem? Item)> ItemAsync(PharmaDbContext db, int itemId)

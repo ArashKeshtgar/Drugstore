@@ -193,6 +193,65 @@ public class FhirTests(ApiFactory factory) : IClassFixture<ApiFactory>
             Drug("601", "G106", "99000071", "Atorvastatin 20 mg tablet", "Take 1 tablet once a day", 30, 30, 0, true));
         Assert.Equal(HttpStatusCode.BadRequest, (await Post(notAHealthCard, token)).Status);
     }
+
+    /// <summary>A prescription for the given clinic MRN, with a confidentiality label on each drug when given.</summary>
+    private static JsonObject Labelled(string group, string mrn, string card, string family, string? label, string rxId)
+    {
+        var bundle = Bundle(group, card, family, "Ana", "1970-05-05", "123456",
+            Drug(rxId, group, "99000191", "Acetaminophen 500 mg tablet", "Take 1 tablet every 6 hours as needed", 20, 5, 0, true));
+        bundle["entry"]![0]!["resource"]!["identifier"]![0]!["value"] = mrn;
+        if (label is not null)
+            bundle["entry"]![2]!["resource"]!["meta"] = new JsonObject
+            {
+                ["security"] = new JsonArray(new JsonObject { ["system"] = "http://terminology.hl7.org/CodeSystem/v3-Confidentiality", ["code"] = label }),
+            };
+        return bundle;
+    }
+
+    private static JsonObject Merge(string merged, string survivor) => new()
+    {
+        ["resourceType"] = "Bundle", ["type"] = "transaction",
+        ["entry"] = new JsonArray(new JsonObject
+        {
+            ["resource"] = new JsonObject
+            {
+                ["resourceType"] = "Patient", ["active"] = false,
+                ["identifier"] = new JsonArray(Identifier("urn:clinichub:harbourview:mrn", merged)),
+                ["link"] = new JsonArray(new JsonObject
+                {
+                    ["type"] = "replaced-by", ["other"] = new JsonObject { ["identifier"] = Identifier("urn:clinichub:harbourview:mrn", survivor) },
+                }),
+            },
+            ["request"] = new JsonObject { ["method"] = "PUT", ["url"] = $"Patient?identifier=urn:clinichub:harbourview:mrn|{merged}" },
+        }),
+    };
+
+    [Fact]
+    public async Task A_labelled_prescription_keeps_its_label_and_the_clinics_mrn()
+    {
+        var token = ApiFactory.HubToken();
+        Assert.Equal(HttpStatusCode.OK, (await Post(Labelled("G150", "HV000150", "1111111116", "Restrepo", "V", "150"), token)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Post(Labelled("G151", "HV000151", "2222222224", "Okonkwo", null, "151"), token)).Status);
+        Assert.Equal("V", await factory.Scalar<string>("SELECT Confidentiality FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G150'"));
+        Assert.Null(await factory.Scalar<string>("SELECT Confidentiality FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G151'"));
+        Assert.Equal("harbourview|HV000150", await factory.Scalar<string>("SELECT SourceMrn FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G150'"));
+    }
+
+    [Fact]
+    public async Task A_merge_moves_the_clinics_mrn_and_notes_two_pharmacy_patients()
+    {
+        var token = ApiFactory.HubToken();
+        Assert.Equal(HttpStatusCode.OK, (await Post(Labelled("G160", "HV000160", "3333333332", "Achterberg", null, "160"), token)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Post(Labelled("G161", "HV000161", "5555555550", "Achterberg-Lowe", null, "161"), token)).Status);
+
+        var (status, _) = await Post(Merge("HV000160", "HV000161"), token);
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("harbourview|HV000161", await factory.Scalar<string>("SELECT SourceMrn FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G160'"));
+        Assert.Equal(1, await factory.Scalar<int>("SELECT COUNT(*) FROM audit.AccessLog WHERE Context LIKE N'Clinic merged HV000160 into HV000161%possible duplicate%'"));
+
+        Assert.Equal(HttpStatusCode.OK, (await Post(Merge("HV000998", "HV000999"), token)).Status);       // never here: nothing to do
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post(Merge("HV000161", "HV000161"), token)).Status);
+    }
 }
 
 /// <summary>What each of ClinicHub's pharmacy permissions allows (the development stub stands in for a signed-in person).</summary>

@@ -53,6 +53,8 @@ public static class FhirEndpoints
             if (entries.Count == 0 || entries.Any(r => r is null))
                 throw new Invalid("The Bundle has no entries.");
             var requests = entries.Where(r => (string?)r!["resourceType"] == "MedicationRequest").ToList();
+            if (entries is [{ } only] && (string?)only["resourceType"] == "Patient" && only["link"] is not null)
+                return Results.Text((await MergeAsync(db, clock, slug, only, ct)).ToJsonString(), "application/fhir+json");
             var response = requests.Count > 0 && requests.Count == entries.Count && requests.All(r => (string?)r!["status"] == "cancelled")
                 ? await CancelAsync(db, clock, slug, requests!, ct)
                 : await ReceiveAsync(db, clock, hub, slug, bundle, entries!, ct);
@@ -182,6 +184,8 @@ public static class FhirEndpoints
                 {
                     RxNumber = (await db.NextRxNumberAsync()).ToString(), PatientId = patient.PatientId, PrescriberId = prescriber.PrescriberId, WrittenDate = fresh.Min(l => l.Written),
                     ReceivedAt = now, Channel = "eRx", PlanId = patient.DefaultPlanId, Status = RxStatus.Received, ExternalId = externalGroup,
+                    SourceMrn = Identifier(patientResource, $"urn:clinichub:{slug}:mrn") is { } mrn ? Trim($"{slug}|{mrn}", 60) : null,
+                    Confidentiality = requests.Select(Confidentiality).Max(),
                     Notes = string.IsNullOrEmpty(notes) ? null : notes, ReceivedBy = receivedBy, UpdatedAt = now,
                 });
             }
@@ -253,6 +257,55 @@ public static class FhirEndpoints
         }
         await db.SaveChangesAsync(ct);
         return Transaction(locations.Select(l => ("200 OK", l)));
+    }
+
+    public const string ConfidentialitySystem = "http://terminology.hl7.org/CodeSystem/v3-Confidentiality";
+
+    /// <summary>A prescription's label: R or V, any other code of that system treated as R (the contract's rule); null for none.</summary>
+    public static string? Confidentiality(JsonNode? resource)
+    {
+        var codes = resource?["meta"]?["security"]?.AsArray().Where(c => (string?)c?["system"] == ConfidentialitySystem)
+            .Select(c => (string?)c!["code"]).Where(c => !string.IsNullOrEmpty(c)).ToList() ?? [];
+        if (codes.Count == 0 || codes.All(c => c is "U" or "L" or "M" or "N"))
+            return null;
+        return codes.Contains("V") ? "V" : "R";
+    }
+
+    /// <summary>
+    /// ClinicHub merged two records (IntegrationHub's flow 6). The pharmacy keeps its own patients (by health card, or
+    /// name and birth date), so the merge moves the clinic's MRN on its prescriptions to the survivor's; two pharmacy
+    /// patients behind one clinic MRN are written to the access log as a possible duplicate, not merged on the clinic's
+    /// word. 200 either way, and for a record never seen here.
+    /// </summary>
+    private static async Task<JsonObject> MergeAsync(PharmaDbContext db, TimeProvider clock, string slug, JsonNode patient, CancellationToken ct)
+    {
+        var system = $"urn:clinichub:{slug}:mrn";
+        var merged = Identifier(patient, system);
+        var replacedBy = patient["link"]?.AsArray().FirstOrDefault(l => (string?)l?["type"] == "replaced-by")?["other"]?["identifier"];
+        var survivor = (string?)replacedBy?["system"] == system ? ((string?)replacedBy?["value"])?.Trim() : null;
+        if (string.IsNullOrWhiteSpace(merged) || string.IsNullOrWhiteSpace(survivor) || merged == survivor)
+            throw new Invalid($"A merge names the merged and the surviving MRN, both {system}.");
+        var (from, to) = (Trim($"{slug}|{merged}", 60), Trim($"{slug}|{survivor}", 60));
+        var moved = await db.Prescriptions.Where(p => p.SourceMrn == from).ToListAsync(ct);
+        if (moved.Count > 0)
+        {
+            var theirs = await db.Prescriptions.Where(p => p.SourceMrn == to).Select(p => p.PatientId).Distinct().ToListAsync(ct);
+            var now = clock.GetUtcNow().UtcDateTime;
+            foreach (var p in moved)
+            {
+                p.SourceMrn = to;
+                p.UpdatedAt = now;
+            }
+            var patients = moved.Select(p => p.PatientId).Concat(theirs).Distinct().ToList();
+            db.AccessLog.Add(new AccessLog
+            {
+                OccurredAt = now, UserName = $"ClinicHub ({slug})", Action = "Update", PatientId = moved[0].PatientId,
+                Context = $"Clinic merged {merged} into {survivor}: {moved.Count} prescriptions follow"
+                    + (patients.Count > 1 ? $"; possible duplicate pharmacy patients {string.Join(", ", patients)}" : ""),
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        return Transaction([("200 OK", $"Patient/{survivor}")]);
     }
 
     private static string ExternalOf(JsonNode r) => $"{(string?)r["identifier"]![0]!["system"]}|{(string?)r["identifier"]![0]!["value"]}";

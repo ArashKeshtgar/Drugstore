@@ -182,6 +182,13 @@ public class Prescription
     public string Status { get; set; } = RxStatus.Received;
     public string? Notes { get; set; }
     public string? ExternalId { get; set; }
+
+    /// <summary>An electronic prescription's patient as the clinic knows them: {clinic}|{MRN}, so a merge there is followed.</summary>
+    public string? SourceMrn { get; set; }
+
+    /// <summary>ClinicHub's confidentiality label (a consent directive): R restricted, V very restricted; null for none.</summary>
+    public string? Confidentiality { get; set; }
+
     public string ReceivedBy { get; set; } = "";
     public DateTime UpdatedAt { get; set; }
     public byte[] RowVer { get; set; } = [];

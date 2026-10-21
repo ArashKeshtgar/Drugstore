@@ -57,6 +57,8 @@ export type Rx = {
   prescriptionId: number; rxNumber: string; patientId: number; patient: string; dateOfBirth: string; prescriberId: number; prescriber: string; prescriberLicence: string
   writtenDate: string; receivedAt: string; channel: string; planId?: number; plan?: string; status: string; notes?: string; receivedBy: string
   allergies: { what: string; reaction?: string; severity: string }[]; items: Item[]
+  /** The clinic's confidentiality label (a consent directive): R restricted, V very restricted. */
+  confidentiality: 'R' | 'V' | null
 }
 export type QueueRow = { prescriptionId: number; rxNumber: string; receivedAt: string; channel: string; status: string; patient: string; patientId: number; prescriber: string; plan: string; items: number; ready: number; warnings: number }
 
