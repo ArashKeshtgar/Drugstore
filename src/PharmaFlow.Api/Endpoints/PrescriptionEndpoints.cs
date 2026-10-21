@@ -25,20 +25,46 @@ public static class PrescriptionEndpoints
 
     public static void MapPrescriptionEndpoints(this IEndpointRouteBuilder app)
     {
+        // Breaking the glass for a restricted prescription (the patient has a consent directive at the clinic): a reason, logged.
+        // Outside the filtered group, since the filter is what it opens.
+        app.MapPost("/api/prescriptions/{id:int}/override", async (int id, ConfidentialityGate.OverrideBody body, ClaimsPrincipal user, PharmaDbContext db, ConfidentialityGate gate, TimeProvider clock) =>
+        {
+            var rx = await db.Prescriptions.AsNoTracking().Where(r => r.PrescriptionId == id).Select(r => new { r.PatientId, r.RxNumber, r.Confidentiality }).SingleOrDefaultAsync();
+            if (rx is null) return Results.NotFound();
+            if (rx.Confidentiality is null) return Results.Ok(new { open = true });
+            if (!ConfidentialityGate.ReasonOk(body.Reason))
+                return Results.BadRequest(new { title = $"Say why, in at least {ConfidentialityGate.MinReason} characters." });
+            var until = gate.Open(user, id);
+            var why = body.Reason!.Trim();
+            PeopleEndpoints.Audit(db, user, clock, "Update", rx.PatientId, $"RESTRICTED OVERRIDE ({rx.Confidentiality}) prescription {rx.RxNumber}: {(why.Length > 200 ? why[..200] : why)}");
+            await db.SaveChangesAsync();
+            return Results.Ok(new { open = true, until });
+        }).RequireAuthorization(Policies.Any).WithTags("Reception");
+
         var api = app.MapGroup("/api/prescriptions").WithTags("Reception").RequireAuthorization(Policies.Any).RequireForWrites(Policies.Reception);
+        // A restricted prescription is closed until the user has broken the glass for it (403 restricted): its detail and
+        // every action on it or on one of its drugs.
+        api.AddEndpointFilter(RestrictedFilter);
 
         // The reception queue: what came in, newest first; by default what is still open.
-        api.MapGet("", async (string? status, PharmaDbContext db) =>
+        api.MapGet("", async (string? status, ClaimsPrincipal user, PharmaDbContext db, ConfidentialityGate gate) =>
         {
             var q = db.Prescriptions.AsNoTracking().AsQueryable();
             q = string.IsNullOrEmpty(status) ? q.Where(r => r.Status == RxStatus.Received || r.Status == RxStatus.InProgress || r.Status == RxStatus.OnHold) : q.Where(r => r.Status == status);
-            return await q.OrderByDescending(r => r.ReceivedAt).Take(200).Select(r => new
+            var rows = await q.OrderByDescending(r => r.ReceivedAt).Take(200).Select(r => new
             {
                 r.PrescriptionId, r.RxNumber, r.ReceivedAt, r.Channel, r.Status, patient = r.Patient.LastName + ", " + r.Patient.FirstName, r.PatientId,
                 prescriber = r.Prescriber.LastName + ", " + r.Prescriber.FirstName, plan = r.Plan != null ? r.Plan.Name : "No plan",
                 items = r.Items.Count, ready = r.Items.Count(i => i.Status == ItemStatus.ReadyToFill),
                 warnings = r.Items.Count(i => i.WarningsJson != "[]" && i.WarningsReviewedAt == null),
+                r.Confidentiality,
             }).ToListAsync();
+            // A restricted prescription is listed, so it is not lost, but who it is for stays hidden until the glass is broken.
+            return rows.Select(r => r.Confidentiality is null || gate.IsOpen(user, r.PrescriptionId) ? (object)r : new
+            {
+                r.PrescriptionId, r.RxNumber, r.ReceivedAt, r.Channel, r.Status, patient = "Restricted", PatientId = 0, prescriber = "", plan = "",
+                r.items, ready = 0, warnings = 0, r.Confidentiality,
+            }).ToList();
         });
 
         api.MapGet("/{id:int}", async (int id, ClaimsPrincipal user, PharmaDbContext db, TimeProvider clock) =>
@@ -138,6 +164,21 @@ public static class PrescriptionEndpoints
 
         api.MapPost("/items/{itemId:int}/hold", (int itemId, ReasonBody b, PharmaDbContext db, TimeProvider clock) => SetItem(db, clock, itemId, ItemStatus.OnHold, b.Reason));
         api.MapPost("/items/{itemId:int}/cancel", (int itemId, ReasonBody b, PharmaDbContext db, TimeProvider clock) => SetItem(db, clock, itemId, ItemStatus.Cancelled, b.Reason));
+    }
+
+    /// <summary>The prescription a route names (by <c>id</c>, or by <c>itemId</c> of one of its drugs) must not be restricted and closed.</summary>
+    public static async ValueTask<object?> RestrictedFilter(EndpointFilterInvocationContext ctx, EndpointFilterDelegate next)
+    {
+        var http = ctx.HttpContext;
+        var db = http.RequestServices.GetRequiredService<PharmaDbContext>();
+        int? id = int.TryParse(http.Request.RouteValues["id"]?.ToString(), out var rxId) ? rxId : null;
+        if (id is null && int.TryParse(http.Request.RouteValues["itemId"]?.ToString(), out var itemId))
+            id = await db.PrescriptionItems.AsNoTracking().Where(i => i.ItemId == itemId).Select(i => (int?)i.PrescriptionId).SingleOrDefaultAsync();
+        if (id is { } found
+            && await db.Prescriptions.AsNoTracking().Where(r => r.PrescriptionId == found).Select(r => r.Confidentiality).SingleOrDefaultAsync() is { } label
+            && !http.RequestServices.GetRequiredService<ConfidentialityGate>().IsOpen(http.User, found))
+            return ConfidentialityGate.Closed(label);
+        return await next(ctx);
     }
 
     public record CheckResult(string SigExpanded, short? DaysSupply, List<Warning> Warnings);

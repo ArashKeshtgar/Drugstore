@@ -116,6 +116,6 @@ public static class InventoryEndpoints
             PeopleEndpoints.Audit(db, user, clock, "Update", rx.PatientId, $"Dispensed {item.Drug!.BrandName} on Rx {rx.RxNumber}");
             await db.SaveChangesAsync();
             return Results.Ok(new { dispense.DispenseId, price, monitored = await db.Drugs.AnyAsync(d => d.DrugId == item.DrugId && d.Schedule.Monitored), refillsRemaining = item.RefillsRemaining });
-        }).WithTags("Dispensing").RequireAuthorization(Policies.Dispense);
+        }).WithTags("Dispensing").RequireAuthorization(Policies.Dispense).AddEndpointFilter(PrescriptionEndpoints.RestrictedFilter);
     }
 }

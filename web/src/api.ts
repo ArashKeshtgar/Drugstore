@@ -1,8 +1,11 @@
 // Typed client for PharmaFlow.Api. Shapes mirror the C# records in src/PharmaFlow.Api.
 
 export class ApiError extends Error {
-  constructor(public status: number, message: string, public fieldErrors: Record<string, string[]> = {}) { super(message) }
+  constructor(public status: number, message: string, public fieldErrors: Record<string, string[]> = {}, public data: Record<string, unknown> = {}) { super(message) }
 }
+
+/** The 403 a restricted prescription answers with until the user has said why they need it (a consent directive at the clinic). */
+export const isRestricted = (e: unknown): e is ApiError => e instanceof ApiError && e.status === 403 && e.data.code === 'restricted'
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -14,7 +17,7 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   if (res.status === 204) return undefined as T
   const text = await res.text()
   const data = text ? JSON.parse(text) : undefined
-  if (!res.ok) throw new ApiError(res.status, data?.detail ?? data?.title ?? `Request failed (${res.status})`, data?.errors ?? {})
+  if (!res.ok) throw new ApiError(res.status, data?.detail ?? data?.title ?? `Request failed (${res.status})`, data?.errors ?? {}, data ?? {})
   return data as T
 }
 
@@ -60,7 +63,7 @@ export type Rx = {
   /** The clinic's confidentiality label (a consent directive): R restricted, V very restricted. */
   confidentiality: 'R' | 'V' | null
 }
-export type QueueRow = { prescriptionId: number; rxNumber: string; receivedAt: string; channel: string; status: string; patient: string; patientId: number; prescriber: string; plan: string; items: number; ready: number; warnings: number }
+export type QueueRow = { prescriptionId: number; rxNumber: string; receivedAt: string; channel: string; status: string; patient: string; patientId: number; prescriber: string; plan: string; items: number; ready: number; warnings: number; confidentiality?: 'R' | 'V' | null }
 
 const q = (params: Record<string, string | number | boolean | undefined | null>) => {
   const p = new URLSearchParams()
@@ -99,6 +102,8 @@ export const api = {
   savePrescriber: (id: number | null, body: Omit<Prescriber, 'prescriberId'>) => request<Prescriber>(id ? 'PUT' : 'POST', id ? `/api/prescribers/${id}` : '/api/prescribers', body),
   queue: (status?: string) => request<QueueRow[]>('GET', `/api/prescriptions${q({ status })}`),
   prescription: (id: number) => request<Rx>('GET', `/api/prescriptions/${id}`),
+  /** Break the glass for a restricted prescription: a reason of at least 10 characters, logged with the user's name. */
+  overridePrescription: (id: number, reason: string) => request<{ open: boolean }>('POST', `/api/prescriptions/${id}/override`, { reason }),
   check: (body: { patientId: number; writtenDate: string; planId?: number | null; items: ItemInput[] }) =>
     request<{ sigExpanded: string; daysSupply?: number; warnings: Warning[] }[]>('POST', '/api/prescriptions/check', body),
   receive: (body: { patientId: number; prescriberId: number; writtenDate: string; channel: string; planId?: number | null; notes?: string | null; items: ItemInput[] }) =>

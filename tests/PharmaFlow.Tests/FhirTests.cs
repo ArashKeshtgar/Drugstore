@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -235,6 +236,32 @@ public class FhirTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Assert.Equal("V", await factory.Scalar<string>("SELECT Confidentiality FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G150'"));
         Assert.Null(await factory.Scalar<string>("SELECT Confidentiality FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G151'"));
         Assert.Equal("harbourview|HV000150", await factory.Scalar<string>("SELECT SourceMrn FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G150'"));
+    }
+
+    [Fact]
+    public async Task A_restricted_prescription_is_closed_until_someone_says_why_and_the_override_is_on_the_record()
+    {
+        Assert.Equal(HttpStatusCode.OK, (await Post(Labelled("G170", "HV000170", "6666666668", "Kowalczyk", "V", "170"), ApiFactory.HubToken())).Status);
+        var id = await factory.Scalar<int>("SELECT PrescriptionId FROM rx.Prescription WHERE ExternalId = 'urn:clinichub:harbourview:prescription-group|G170'");
+        var item = await factory.Scalar<int>($"SELECT TOP 1 ItemId FROM rx.PrescriptionItem WHERE PrescriptionId = {id}");
+        var api = factory.CreateClient();
+
+        // Listed so it is not lost, but who it is for stays hidden; the detail and every action on it are refused.
+        var row = (await api.GetFromJsonAsync<JsonArray>("/api/prescriptions"))!.Single(r => (int)r!["prescriptionId"]! == id)!;
+        Assert.Equal("Restricted", (string)row["patient"]!);
+        Assert.Equal("V", (string)row["confidentiality"]!);
+        var closed = await api.GetAsync($"/api/prescriptions/{id}");
+        Assert.Equal(HttpStatusCode.Forbidden, closed.StatusCode);
+        Assert.Equal("restricted", (string)JsonNode.Parse(await closed.Content.ReadAsStringAsync())!["code"]!);
+        Assert.Equal(HttpStatusCode.Forbidden, (await api.PostAsync($"/api/prescriptions/items/{item}/review", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await api.PostAsJsonAsync($"/api/prescriptions/items/{item}/hold", new { reason = "x" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.PostAsJsonAsync($"/api/prescriptions/{id}/override", new { reason = "short" })).StatusCode);
+        (await api.PostAsJsonAsync($"/api/prescriptions/{id}/override", new { reason = "Filling the prescription for the patient at the counter" })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, (await api.GetAsync($"/api/prescriptions/{id}")).StatusCode);
+        var open = (await api.GetFromJsonAsync<JsonArray>("/api/prescriptions"))!.Single(r => (int)r!["prescriptionId"]! == id)!;
+        Assert.Equal("Kowalczyk, Ana", (string)open["patient"]!);
+        Assert.Equal(1, await factory.Scalar<int>("SELECT COUNT(*) FROM audit.AccessLog WHERE Context LIKE N'RESTRICTED OVERRIDE (V) prescription%Filling the prescription%'"));
     }
 
     [Fact]

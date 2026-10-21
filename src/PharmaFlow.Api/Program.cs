@@ -29,6 +29,8 @@ builder.Services.AddAuthorizationBuilder().AddPharmaPolicies();
 builder.Services.Configure<PharmaFlow.Api.Domain.FinanceOptions>(builder.Configuration.GetSection("Finance"));
 builder.Services.AddHttpClient(PharmaFlow.Api.Domain.FinanceFeed.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<PharmaFlow.Api.Domain.FinanceFeed>();
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<PharmaFlow.Api.Auth.ConfidentialityGate>();
 builder.Services.AddHostedService<PharmaFlow.Api.Domain.FinanceWorker>();
 
 var app = builder.Build();

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, ApiError, dateTime, drugLabel, firstError, money, today, type Drug, type ItemInput, type PatientRow, type Prescriber, type QueueRow, type Rx, type Warning } from '../api'
+import { RestrictedPanel } from '../components/RestrictedPanel'
+import { api, ApiError, dateTime, drugLabel, firstError, isRestricted, money, today, type Drug, type ItemInput, type PatientRow, type Prescriber, type QueueRow, type Rx, type Warning } from '../api'
 import { useRef_ } from '../App'
 
 const STATUSES = [['', 'Open'], ['Received', 'Received'], ['InProgress', 'In progress'], ['OnHold', 'On hold'], ['Completed', 'Completed'], ['Cancelled', 'Cancelled']]
@@ -151,8 +152,11 @@ function RxView({ id, onChanged, onClose }: { id: number; onChanged: () => void;
   const [rx, setRx] = useState<Rx | null>(null)
   const [drugs, setDrugs] = useState<Drug[]>([])
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { api.prescription(id).then(setRx); api.drugs().then(setDrugs) }, [id])
+  const [restricted, setRestricted] = useState<string | null>(null)   // the label, while the prescription is closed
+  const load = () => api.prescription(id).then(r => { setRestricted(null); setRx(r) }).catch(e => { if (isRestricted(e)) setRestricted(String(e.data.label ?? 'R')); else setError(firstError(e, 'Not opened.')) })
+  useEffect(() => { setRx(null); setRestricted(null); load(); api.drugs().then(setDrugs) }, [id])
   const act = async (f: () => Promise<Rx>) => { setError(null); try { setRx(await f()); onChanged() } catch (e) { setError(firstError(e, 'Not done.')) } }
+  if (restricted && !rx) return <RestrictedPanel label={restricted} onClose={onClose} onOpen={async reason => { await api.overridePrescription(id, reason); await load() }} />
   if (!rx) return <aside className="card pad side wide"><p className="muted">Loading…</p></aside>
 
   return (

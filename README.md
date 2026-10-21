@@ -69,7 +69,8 @@ Pharmacist role; `admin` has everything.
       inventory. `Finance:BaseUrl` (and in development `Finance:DevKey`)
 - [ ] Filling and verification as separate steps, labels, Narcotics Monitoring System submission
 - [x] Electronic prescriptions from ClinicHub: a FHIR Bundle to `/fhir` (token from ClinicHub, audience `pharmaflow`,
-      scope `prescriptions`) becomes one `eRx` prescription at reception; a resend is recognised; a drug is withdrawn
+      scope `prescriptions`) becomes one `eRx` prescription at reception (one the clinic labels as restricted is closed until a user
+      gives a logged reason, for an hour; the queue hides who it is for until then); a resend is recognised; a drug is withdrawn
       until it is filled, after which the pharmacy answers 409. `ClinicHub:Authority` turns it on
 - [x] Sign-in through ClinicHub: OpenID Connect, one session cookie re-checked with ClinicHub every few minutes. Its
       roles give `reception`, `dispense`, `stock` and `admin` (which implies the rest); reads need any of them. With
