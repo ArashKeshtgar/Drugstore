@@ -40,9 +40,9 @@ public static class ClinicHubSignIn
         });
         auth.AddOpenIdConnect(Scheme, "ClinicHub", o =>
         {
+            // Not MetadataAddress: the browser is sent to the endpoints the discovery document names, and those must be the
+            // ones on ClinicHub's public address (in development :5301, where its sign-in pages are), not the API's own.
             o.Authority = hub.Authority;
-            if (!string.IsNullOrWhiteSpace(hub.MetadataAddress))
-                o.MetadataAddress = hub.MetadataAddress;
             o.ClientId = hub.ClientId;
             o.ClientSecret = hub.ClientSecret;
             o.RequireHttpsMetadata = hub.RequireHttpsMetadata;

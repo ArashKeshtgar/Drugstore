@@ -13,7 +13,8 @@ public class ClinicHubOptions
     /// <summary>ClinicHub's address, which is the issuer of its tokens, e.g. http://localhost:5301/. Empty: not connected.</summary>
     public string? Authority { get; set; }
 
-    /// <summary>Where the discovery document is fetched when that is not {Authority}.well-known/openid-configuration (development, behind a proxy).</summary>
+    /// <summary>Where the keys for ClinicHub's incoming prescriptions are fetched when that is not {Authority}.well-known/openid-configuration
+    /// (development: the API directly, so prescriptions don't depend on the web proxy). Sign-in always uses the Authority's own document.</summary>
     public string? MetadataAddress { get; set; }
 
     /// <summary>The application's client id in ClinicHub, which is also the audience of the tokens it sends.</summary>
