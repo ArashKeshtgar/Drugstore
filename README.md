@@ -40,7 +40,10 @@ dotnet test                                    # builds its own database from da
 
 Electronic prescriptions need ClinicHub running: `ClinicHub:Authority` (its address, the issuer of its tokens) and, in
 development, `ClinicHub:MetadataAddress`, are in `appsettings.Development.json`. ClinicHub sends to `{this address}/fhir`
-(`Integrations:PharmaFlow:FhirBaseUrl`), directly or through IntegrationHub's `pharmaflow` route. An existing database
+(`Integrations:PharmaFlow:FhirBaseUrl`), directly or through IntegrationHub's `pharmaflow` route. `dotnet run --project
+src/PharmaFlow.Api --launch-profile via-hub` also sends the accounting documents through the hub's `finance` route
+(`Finance:BaseUrl`, still with the development key, which the hub passes on only when it is started with
+`HUB_ROUTE_FINANCE_API_KEY_HEADER=X-Finance-Key`); the `http` profile goes straight to FinancePowerApp. An existing database
 gets the new column with `./database/deploy.ps1`.
 
 Sign-in is a development stub (everyone is the developer pharmacist, with every permission; the header `X-Dev-Permissions:
