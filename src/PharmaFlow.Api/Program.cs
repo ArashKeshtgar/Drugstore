@@ -5,6 +5,8 @@ using PharmaFlow.Api.Data;
 using PharmaFlow.Api.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
+// Secrets as files, one per setting (e.g. ConnectionStrings__Finance), the way Docker mounts them; none outside a container.
+builder.Configuration.AddKeyPerFile("/run/secrets", optional: true);
 
 // Staff sign in through ClinicHub when it is configured (ClinicHub:Authority and ClientSecret); otherwise there is only the
 // development stub, which exists in Development and in tests and nowhere else.
