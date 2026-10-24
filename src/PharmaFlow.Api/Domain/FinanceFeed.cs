@@ -11,8 +11,8 @@ public class FinanceOptions
     public string? BaseUrl { get; set; }
 
     /// <summary>
-    /// Development key for FinancePowerApp (X-Finance-Key). With sign-in through ClinicHub, PharmaFlow will use a ClinicHub
-    /// client-credentials token for the scope "finance" like the other applications.
+    /// Development key for FinancePowerApp (X-Finance-Key). With sign-in through ClinicHub, PharmaFlow sends a ClinicHub
+    /// client-credentials token for the scope "finance" instead, like the other applications.
     /// </summary>
     public string? DevKey { get; set; }
 
@@ -31,9 +31,12 @@ public class FinanceOptions
 /// inventory.</item>
 /// </list>
 /// </summary>
-public class FinanceFeed(IHttpClientFactory http, Microsoft.Extensions.Options.IOptionsMonitor<FinanceOptions> options, IServiceScopeFactory scopes, TimeProvider clock, ILogger<FinanceFeed> logger)
+public class FinanceFeed(IHttpClientFactory http, Microsoft.Extensions.Options.IOptionsMonitor<FinanceOptions> options, IServiceScopeFactory scopes, TimeProvider clock, ILogger<FinanceFeed> logger,
+    Microsoft.Extensions.Options.IOptions<PharmaFlow.Api.Auth.ClinicHubOptions> hub, Microsoft.Extensions.Options.IOptionsMonitor<Microsoft.AspNetCore.Authentication.OpenIdConnect.OpenIdConnectOptions> oidc)
 {
     public const string HttpClientName = "finance";
+    private string? _token;
+    private DateTime _tokenExpires;
     public bool Connected => !string.IsNullOrWhiteSpace(options.CurrentValue.BaseUrl);
 
     public async Task<int> SendAsync(CancellationToken ct = default)
@@ -52,8 +55,13 @@ public class FinanceFeed(IHttpClientFactory http, Microsoft.Extensions.Options.I
                 {
                     Content = JsonContent.Create(new JsonArray(chunk.Select(d => (JsonNode)d.DeepClone()).ToArray())),
                 };
-                if (options.CurrentValue.DevKey is { Length: > 0 } key) request.Headers.Add("X-Finance-Key", key);
+                if (hub.Value.SignInEnabled)
+                    request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", await TokenAsync(ct));
+                else if (options.CurrentValue.DevKey is { Length: > 0 } key)
+                    request.Headers.Add("X-Finance-Key", key);
                 using var response = await http.CreateClient(HttpClientName).SendAsync(request, ct);
+                if ((int)response.StatusCode == 401)
+                    _token = null;
                 if (!response.IsSuccessStatusCode)
                 {
                     logger.LogWarning("FinancePowerApp refused {Count} documents: {Status} {Body}", chunk.Length, (int)response.StatusCode, await response.Content.ReadAsStringAsync(ct));
@@ -71,6 +79,25 @@ public class FinanceFeed(IHttpClientFactory http, Microsoft.Extensions.Options.I
             accepted += chunk.Length;
         }
         return accepted;
+    }
+
+    /// <summary>PharmaFlow as itself: a client-credentials token from ClinicHub for the scope "finance", kept until shortly before it expires.</summary>
+    private async Task<string> TokenAsync(CancellationToken ct)
+    {
+        if (_token is not null && clock.GetUtcNow().UtcDateTime < _tokenExpires)
+            return _token;
+        var configuration = await oidc.Get(PharmaFlow.Api.Auth.ClinicHubSignIn.Scheme).ConfigurationManager!.GetConfigurationAsync(ct);
+        using var response = await http.CreateClient(HttpClientName).PostAsync(configuration.TokenEndpoint, new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "client_credentials", ["client_id"] = hub.Value.ClientId, ["client_secret"] = hub.Value.ClientSecret ?? "", ["scope"] = "finance",
+        }), ct);
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"ClinicHub refused PharmaFlow's credentials for finance ({(int)response.StatusCode}).");
+        using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        _token = json.RootElement.GetProperty("access_token").GetString();
+        var seconds = json.RootElement.TryGetProperty("expires_in", out var e) ? e.GetInt32() : 300;
+        _tokenExpires = clock.GetUtcNow().UtcDateTime.AddSeconds(Math.Max(30, seconds - 60));
+        return _token!;
     }
 
     public static async Task<List<JsonObject>> BuildAsync(PharmaDbContext db, string key, CancellationToken ct = default)
